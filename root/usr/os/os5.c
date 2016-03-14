@@ -138,11 +138,50 @@ alltraps()
 setup_user_paging()
 {
   //YOUR CODE: lec7-spoc challenge-part2
+  int i;
+  // Virtual addresses 0x40000000 ~ 0x40100000 correspond to
+  // the 256th directory entry. And the physical addresses 
+  // 0x02000000--x0x02100000 they map to happen to be the same
+  // as those of virtual address 0xc2000000 ~ 0xc2100000, which
+  // correspond to the ``768 + 8``th directory entry.
+  pg_dir[256] = pg_dir[768 + 8];
+  // Each page table contains 1024 entries, corresponding to 4MB. 
+  // But we only need 1MB for user. Hence, only give the first 256 
+  // entries the PTE_U flag here.
+  for (i = 0; i < 256; ++i) pg_tbl[8][i] |= PTE_U;
 }
   
 setup_kernel_paging()
 {
   //YOUR CODE: lec7-spoc challenge-part1
+  int i;
+  // Align the page directory so as to ensure that it lies in a single 4KB frame.
+  pg_dir = (int *)((((int)&pg_mem) + 4095) & -4096);
+  for (i=4;i<1024;i++) pg_dir[i] = 0;
+
+  // We need 64MB (for kernel) + 1MB (for user) virtual memory.
+  // Since each page frame occupies 4KB and each page table contains 1K entries,
+  // it follows that each directory entry corresponds to 4MB memory.
+  // Therefore, we need 16 (for kernel) + 1 (for user) page tables in total.
+  pg_tbl[0] = pg_dir + 1024;
+  for(i=1;i<16;i++){
+    pg_tbl[i] = pg_tbl[i-1] + 1024;
+  }
+
+  // The frame assigned for the page directory has 4KB, meaning we can have
+  // 1K page directory entires, which correspond to 1K * 4MB = 4GB virtual memory
+  // in total. However, we only need 64MB virutal memory for kernel. That is,
+  // we only need 0xc0000000 ~ x0xc4000000 for kernel, which corresponds to
+  // the 768th, 769th, 770th, ..., 783th entries.
+  for(i = 768;i < 768 + 16; i++){
+    pg_dir[i] = (int)pg_tbl[i-768] | PTE_P | PTE_W | PTE_U;    
+  }
+  
+  for (i=0;i<16*1024;i++) pg_tbl[0][i] = (i<<12) | PTE_P | PTE_W | PTE_U; 
+  
+  pg_dir[0] = pg_dir[768];
+  pdir(pg_dir);
+  spage(1);
 }
 
 main()
